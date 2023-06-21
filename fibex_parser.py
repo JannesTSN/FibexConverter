@@ -21,6 +21,8 @@
 import xml.etree.ElementTree
 from abstract_parser import AbstractParser
 
+def consolodate_mandatory_flag(mandatory_flag, parent_manadatory_flag):
+    return mandatory_flag if mandatory_flag is not None else parent_manadatory_flag
 
 class FibexParser(AbstractParser):
     def __init__(self):
@@ -218,7 +220,19 @@ class FibexParser(AbstractParser):
             if s is not None:
                 self.__signals__[s.id()] = s
 
-    def interpret_datatype(self, element, utils, serialization_attributes):
+    def process_utilization_bit_order(self, m, parent_utilization):
+        utilization = self.get_from_dict_or_none(m, "Utilization")
+
+        if utilization is None:
+            return None
+
+        if utilization["HighLowByteOrder"] is None:
+            utilization["HighLowByteOrder"] = parent_utilization["HighLowByteOrder"]
+
+        return utilization
+
+
+    def interpret_datatype(self, element, utils, serialization_attributes, parent_mandatory_flag=None):
         ret = None
         p = dict()
 
@@ -355,11 +369,15 @@ class FibexParser(AbstractParser):
                     members = dict()
                     for m in p["Members"]:
 
+                        utilization = self.process_utilization_bit_order(m, utils)
+                        mandatory_flag = consolodate_mandatory_flag(m["Mandatory"], parent_mandatory_flag)
+
                         child = self.interpret_datatype(
                             self.get_from_dict_or_none(self.__datatypes__,
                                                        self.get_from_dict_or_none(m, "DatatypeRef")),
-                            self.get_from_dict_or_none(m, "Utilization"),
-                            self.get_from_dict_or_none(m, "SerializationAttributes")
+                                                        utilization,
+                            self.get_from_dict_or_none(m, "SerializationAttributes"),
+                            mandatory_flag
                         )
 
                         if "Array" in m and m["Array"] is not None:
@@ -376,7 +394,7 @@ class FibexParser(AbstractParser):
                         member = self.__conf_factory__.create_someip_parameter_struct_member(
                             m["Position"],
                             m["Name"],
-                            m["Mandatory"],
+                            mandatory_flag,
                             child,
                             signal
                         )
@@ -389,11 +407,15 @@ class FibexParser(AbstractParser):
 
                     members = dict()
                     for m in p["Members"]:
+                        utilization = self.process_utilization_bit_order(m, utils)
+                        mandatory_flag = consolodate_mandatory_flag(m["Mandatory"], parent_mandatory_flag)
+
                         child = self.interpret_datatype(
                             self.get_from_dict_or_none(self.__datatypes__,
                                                        self.get_from_dict_or_none(m, "DatatypeRef")),
-                            self.get_from_dict_or_none(m, "Utilization"),
-                            self.get_from_dict_or_none(m, "SerializationAttributes")
+                                                        utilization,
+                            self.get_from_dict_or_none(m, "SerializationAttributes"),
+                            mandatory_flag
                         )
 
                         if "Array" in m and m["Array"] is not None:
@@ -407,7 +429,7 @@ class FibexParser(AbstractParser):
                         member = self.__conf_factory__.create_someip_parameter_union_member(
                             m["Index"],
                             m["Name"],
-                            m["Mandatory"],
+                            mandatory_flag,
                             child
                         )
 
@@ -428,14 +450,18 @@ class FibexParser(AbstractParser):
                     child = None
                     childname = None
                     for m in p["Members"]:
+                        utilization = self.process_utilization_bit_order(m, utils)
+                        mandatory_flag = consolodate_mandatory_flag(m["Mandatory"], parent_mandatory_flag)
+
 
                         if "Position" in m and m["Position"] == 0:
 
                             child = self.interpret_datatype(
                                 self.get_from_dict_or_none(self.__datatypes__,
                                                            self.get_from_dict_or_none(m, "DatatypeRef")),
-                                self.merge_utilizations(utils, self.get_from_dict_or_none(m, "Utilization")),
-                                self.get_from_dict_or_none(m, "SerializationAttributes")
+                                                           self.merge_utilizations(utils, utilization),
+                                                           self.get_from_dict_or_none(m, "SerializationAttributes"),
+                                                           mandatory_flag
                             )
 
                             childname = self.get_from_dict(m, "Name", "")
@@ -532,7 +558,7 @@ class FibexParser(AbstractParser):
 
         dt = self.get_from_dict_or_none(p, "Datatype")
 
-        ret = self.interpret_datatype(dt, utils, serialization_attributes)
+        ret = self.interpret_datatype(dt, utils, serialization_attributes, p["Mandatory"])
 
         if "Array" in p and p["Array"] is not None:
             ret = self.build_array(p["Name"], serialization_attributes["ArrayLengthSize"], p["Array"], ret)
