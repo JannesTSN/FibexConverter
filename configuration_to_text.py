@@ -221,7 +221,7 @@ class SimpleConfigurationFactory(BaseConfigurationFactory):
 class Switch(BaseSwitch):
     def str(self, indent, print_ecu_name=False):
         ret = indent * " "
-        tmp = f" of ECU {self.__ecu__.name()}" if print_ecu_name else ""
+        tmp = f" of ECU {self.__ecu__.name()}" if print_ecu_name and self.__ecu__ is not None else ""
         ret += f"Switch {self.__name__}{tmp}\n"
         for port in self.__ports__:
             ret += port.str(indent + 2)
